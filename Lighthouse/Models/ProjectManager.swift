@@ -7,10 +7,13 @@
 
 import Foundation
 import SwiftUI
+import Observation
 
-class ProjectManager: ObservableObject {
-    @Published var currentProject: Project?
-    @Published var projectURL: URL?
+@Observable
+@MainActor
+class ProjectManager {
+    var currentProject: Project?
+    var projectURL: URL?
     
     private let projectsFolder: URL = {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -62,6 +65,18 @@ class ProjectManager: ObservableObject {
         var language = Language()
         language.isReference = isReference
         currentProject?.languages[languageName] = language
+        saveProject()
+    }
+    
+    func addEmptyPage(to language: String) {
+        guard var lang = currentProject?.languages[language] else { return }
+        
+        let pageNumber = lang.screenshots.count + 1
+        var screenshot = Screenshot()
+        screenshot.pageName = "Page \(pageNumber)"
+        
+        lang.screenshots.append(screenshot)
+        currentProject?.languages[language] = lang
         saveProject()
     }
 }

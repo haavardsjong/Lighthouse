@@ -31,7 +31,8 @@ struct Language: Codable {
 
 struct Screenshot: Codable {
     var id: String = UUID().uuidString
-    var imagePath: String
+    var imagePath: String? = nil  // Optional - can be empty page
+    var pageName: String = ""
     var title: String = ""
     var subtitle: String = ""
 }

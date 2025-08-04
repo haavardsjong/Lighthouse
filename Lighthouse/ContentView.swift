@@ -49,7 +49,7 @@ enum SettingsSection: String, CaseIterable {
 }
 
 struct ContentView: View {
-    @StateObject private var projectManager = ProjectManager()
+    @State private var projectManager = ProjectManager()
     @State private var selection: NavigationItem?
     @State private var showInspector = true
     @State private var showNewProjectDialog = false
@@ -105,14 +105,14 @@ struct ContentView: View {
 
 struct SidebarView: View {
     @Binding var selection: NavigationItem?
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     @State private var showNewLanguagePopover = false
     @State private var newLanguageName = "English"
     
     var body: some View {
         VStack(spacing: 0) {
             // Project Picker
-            if let project = projectManager.currentProject {
+            if projectManager.currentProject != nil {
                 HStack {
                     Text(projectManager.projectURL?.lastPathComponent.replacingOccurrences(of: ".lighthouse", with: "") ?? "Untitled")
                         .font(.headline)
@@ -140,24 +140,49 @@ struct SidebarView: View {
             if let project = projectManager.currentProject {
                 Section("Languages") {
                     ForEach(Array(project.languages.keys.sorted()), id: \.self) { language in
-                        HStack {
-                            if project.languages[language]?.isReference == true {
-                                Label {
-                                    Text(language)
-                                } icon: {
-                                    Image(systemName: "star.fill")
-                                        .foregroundColor(.yellow)
+                        DisclosureGroup {
+                            if let screenshots = project.languages[language]?.screenshots {
+                                ForEach(Array(screenshots.enumerated()), id: \.element.id) { index, screenshot in
+                                    HStack {
+                                        Image(systemName: screenshot.imagePath != nil ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(screenshot.imagePath != nil ? .green : .secondary)
+                                            .font(.caption)
+                                        
+                                        Text(screenshot.pageName.isEmpty ? "Page \(index + 1)" : screenshot.pageName)
+                                            .font(.subheadline)
+                                    }
+                                    .padding(.leading)
+                                    // TODO: Add page-specific navigation later
                                 }
-                            } else {
-                                Label(language, systemImage: "flag")
+                                
+                                Button(action: { projectManager.addEmptyPage(to: language) }) {
+                                    Label("Add Page", systemImage: "plus.circle")
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading)
                             }
-                            Spacer()
-                            if let count = project.languages[language]?.screenshots.count, count > 0 {
-                                Text("\(count)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .background(Capsule().fill(.quaternary))
+                        } label: {
+                            HStack {
+                                if project.languages[language]?.isReference == true {
+                                    Label {
+                                        Text(language)
+                                    } icon: {
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.yellow)
+                                    }
+                                } else {
+                                    Label(language, systemImage: "flag")
+                                }
+                                Spacer()
+                                if let count = project.languages[language]?.screenshots.count, count > 0 {
+                                    Text("\(count)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .background(Capsule().fill(.quaternary))
+                                }
                             }
                         }
                         .tag(NavigationItem.language(language))
@@ -190,7 +215,7 @@ struct SidebarView: View {
 
 struct PreviewView: View {
     let language: String
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     @State private var currentScreenshot = 0
     
     var screenshots: [Screenshot] {
@@ -200,26 +225,41 @@ struct PreviewView: View {
     var body: some View {
         VStack(spacing: 0) {
             if screenshots.isEmpty {
-                // Empty state
-                VStack(spacing: 20) {
+                // Empty language state
+                VStack(spacing: 30) {
+                    Spacer()
+                    
                     Text("Drop screenshots here")
-                        .font(.title)
+                        .font(.title2)
                         .foregroundStyle(.secondary)
                     
                     Image(systemName: "photo.on.rectangle.angled")
                         .font(.system(size: 60))
                         .foregroundStyle(.quaternary)
                     
-                    Text("or click to browse")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
                     Text("Supports: PNG, JPG")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                    
+                    Divider()
+                        .frame(width: 200)
+                    
+                    HStack(spacing: 20) {
+                        Button("Browse Files") {
+                            // TODO: Implement file browser
+                        }
+                        .controlSize(.large)
+                        
+                        Button("Add Empty Page") {
+                            projectManager.addEmptyPage(to: language)
+                        }
+                        .controlSize(.large)
+                    }
+                    
+                    Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.gray.opacity(0.05))
+                .background(Color.gray.opacity(0.02))
                 .onDrop(of: ["public.image"], isTargeted: nil) { providers in
                     // Handle drop
                     return true
@@ -241,6 +281,21 @@ struct PreviewView: View {
                         Image(systemName: "chevron.right")
                     }
                     .disabled(currentScreenshot == screenshots.count - 1)
+                    
+                    Divider()
+                        .frame(height: 20)
+                        .padding(.horizontal, 10)
+                    
+                    Button(action: { 
+                        projectManager.addEmptyPage(to: language)
+                        // Jump to the new page
+                        currentScreenshot = screenshots.count
+                    }) {
+                        Label("Add Page", systemImage: "plus.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add new page")
                 }
                 .padding()
             
@@ -262,18 +317,36 @@ struct PreviewView: View {
                     
                     PhoneFrame {
                         if let screenshot = screenshots[safe: currentScreenshot] {
-                            VStack(spacing: 8) {
-                                Text(screenshot.title.isEmpty ? "Add title" : screenshot.title)
-                                    .font(.largeTitle)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(screenshot.title.isEmpty ? .tertiary : .primary)
-                                
-                                Text(screenshot.subtitle.isEmpty ? "Add subtitle" : screenshot.subtitle)
-                                    .font(.title3)
-                                    .foregroundStyle(screenshot.subtitle.isEmpty ? .tertiary : .secondary)
+                            if screenshot.imagePath == nil {
+                                // Empty page state
+                                VStack(spacing: 20) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 60))
+                                        .foregroundStyle(.quaternary)
+                                    
+                                    Text("Drop screenshot here")
+                                        .font(.headline)
+                                        .foregroundStyle(.secondary)
+                                    
+                                    Text("or browse...")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            } else {
+                                // Screenshot with text
+                                VStack(spacing: 8) {
+                                    Text(screenshot.title.isEmpty ? "Add title" : screenshot.title)
+                                        .font(.largeTitle)
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(screenshot.title.isEmpty ? .tertiary : .primary)
+                                    
+                                    Text(screenshot.subtitle.isEmpty ? "Add subtitle" : screenshot.subtitle)
+                                        .font(.title3)
+                                        .foregroundStyle(screenshot.subtitle.isEmpty ? .tertiary : .secondary)
+                                }
+                                .padding(.top, 80)
+                                .frame(maxHeight: .infinity, alignment: .top)
                             }
-                            .padding(.top, 80)
-                            .frame(maxHeight: .infinity, alignment: .top)
                         }
                     }
                     .scaleEffect(min(geometry.size.width / 400, geometry.size.height / 800))
@@ -467,7 +540,7 @@ struct InspectorView: View {
 
 struct SettingsView: View {
     let section: SettingsSection
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     
     var body: some View {
         ScrollView {
@@ -488,7 +561,7 @@ struct SettingsView: View {
 }
 
 struct AppContextView: View {
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     
     var appContext: Binding<AppContext> {
         Binding(
@@ -591,7 +664,7 @@ struct EmptyProjectView: View {
 }
 
 struct NewProjectSheet: View {
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     @Binding var isPresented: Bool
     @State private var projectName = ""
     
@@ -625,7 +698,7 @@ struct NewProjectSheet: View {
 }
 
 struct AddLanguagePopover: View {
-    @ObservedObject var projectManager: ProjectManager
+    var projectManager: ProjectManager
     @Binding var isPresented: Bool
     @State private var selectedLanguage = "English"
     @State private var isReference = false
@@ -666,7 +739,115 @@ struct AddLanguagePopover: View {
     }
 }
 
-#Preview {
+// Preview wrapper that allows us to inject a ProjectManager
+struct ContentView_Previews: View {
+    @State var projectManager: ProjectManager
+    @State private var selection: NavigationItem?
+    @State private var showInspector = true
+    @State private var showNewProjectDialog = false
+    @State private var newProjectName = ""
+    
+    var body: some View {
+        NavigationSplitView {
+            SidebarView(selection: $selection, projectManager: projectManager)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+        } detail: {
+            Group {
+                switch selection {
+                case .language(let language):
+                    HStack(spacing: 0) {
+                        PreviewView(language: language, projectManager: projectManager)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        
+                        if showInspector {
+                            InspectorView()
+                                .frame(width: 300)
+                                .background(Color(NSColor.controlBackgroundColor))
+                        }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: { withAnimation { showInspector.toggle() } }) {
+                                Label("Inspector", systemImage: "sidebar.right")
+                            }
+                        }
+                    }
+                case .settings(let section):
+                    SettingsView(section: section, projectManager: projectManager)
+                case nil:
+                    if projectManager.currentProject == nil {
+                        EmptyProjectView(showNewProjectDialog: $showNewProjectDialog)
+                    } else if projectManager.currentProject?.languages.isEmpty == true {
+                        Text("Add a language to get started")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Select a language")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showNewProjectDialog) {
+            NewProjectSheet(projectManager: projectManager, isPresented: $showNewProjectDialog)
+        }
+    }
+}
+
+#Preview("Empty State") {
     ContentView()
+        .frame(width: 1200, height: 800)
+}
+
+#Preview("With Project") {
+    ContentView_Previews(projectManager: {
+        let manager = ProjectManager()
+        var project = Project()
+        project.appContext.name = "FocusFlow"
+        project.appContext.tagline = "Deep work made simple"
+        project.appContext.category = "Productivity"
+        project.languages["English"] = Language(isReference: true, screenshots: [
+            Screenshot(id: "1", imagePath: "screenshot1.png", title: "Focus Better", subtitle: "Track your deep work sessions")
+        ])
+        project.languages["Spanish"] = Language(isReference: false, screenshots: [])
+        manager.currentProject = project
+        return manager
+    }())
+    .frame(width: 1200, height: 800)
+}
+
+#Preview("Language Selected") {
+    struct PreviewWrapper: View {
+        @State var projectManager = {
+            let manager = ProjectManager()
+            var project = Project()
+            project.appContext.name = "TestApp"
+            project.languages["English"] = Language(isReference: true, screenshots: [])
+            manager.currentProject = project
+            return manager
+        }()
+        @State var selection: NavigationItem? = .language("English")
+        
+        var body: some View {
+            NavigationSplitView {
+                SidebarView(selection: $selection, projectManager: projectManager)
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+            } detail: {
+                if case .language(let language) = selection {
+                    HStack(spacing: 0) {
+                        PreviewView(language: language, projectManager: projectManager)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        
+                        InspectorView()
+                            .frame(width: 300)
+                            .background(Color(NSColor.controlBackgroundColor))
+                    }
+                }
+            }
+        }
+    }
+    
+    return PreviewWrapper()
         .frame(width: 1200, height: 800)
 }

@@ -43,8 +43,53 @@ This is a native macOS SwiftUI application built with Xcode.
 
 ## Development Guidelines
 
-When implementing features:
-1. Maintain clean, simple SwiftUI code with proper previews
-2. Use native macOS design patterns (NavigationSplitView for sidebar, etc.)
-3. Keep state management simple with @State and @Binding
-4. Ensure all views have #Preview macros for easy development
+### Modern Swift/SwiftUI Patterns (2025)
+
+When implementing features, use modern Swift patterns:
+
+1. **@Observable instead of ObservableObject**
+   ```swift
+   @Observable
+   class ProjectManager {
+       var currentProject: Project?
+   }
+   ```
+
+2. **Structured Concurrency**
+   - Use `async/await` for all asynchronous operations
+   - Use `@MainActor` for UI-related classes
+   - Use `.task { }` modifier for async work in views
+
+3. **Modern State Management**
+   - `@State` for view-local state
+   - `@Bindable` for two-way bindings with @Observable
+   - `@Environment` for dependency injection
+
+4. **Navigation**
+   - Use `NavigationStack` with `NavigationPath` for navigation
+   - Avoid deprecated `NavigationView`
+
+5. **Data Flow**
+   ```swift
+   @MainActor
+   @Observable
+   class ViewModel {
+       var items: [Item] = []
+       
+       func load() async throws {
+           items = try await fetchData()
+       }
+   }
+   ```
+
+6. **View Patterns**
+   - Declarative UI with minimal imperative code
+   - Composition over inheritance
+   - Use `#Preview` macros with multiple states
+   - Prefer computed properties over functions in views
+
+### Code Style
+- Use trailing closures for single-closure parameters
+- Prefer `guard` for early returns
+- Use `if let` and `guard let` for optionals
+- Leverage Swift's type inference where it improves readability
